@@ -14,7 +14,7 @@
     <h1>Knight &amp; Towers</h1>
     <div class="stats">
       <div class="stat">
-        <span class="stat-label">Move</span>
+        <span class="stat-label">Next Move</span>
         <span class="stat-value" id="moveVal">0</span>
       </div>
       <div class="stat">
@@ -35,6 +35,13 @@
         <button id="undoBtn" class="btn">Undo Move</button>
         <button id="resetTowersBtn" class="btn">Clear Unvisited Towers</button>
         <button id="resetAllBtn" class="btn danger">New Game</button>
+      </div>
+
+      <div class="controls save-controls">
+        <button id="saveFileBtn" class="btn small" title="Download this game as a .json file">Save to File</button>
+        <button id="loadFileBtn" class="btn small" title="Restore a game from a .json file">Load from File</button>
+        <input type="file" id="fileInput" accept=".json,application/json" hidden>
+        <span class="save-status" id="saveStatus"></span>
       </div>
 
       <div class="legend">

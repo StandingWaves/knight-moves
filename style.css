@@ -229,6 +229,17 @@ body {
 .btn.danger { color: var(--warn); border-color: #e2b3ac; }
 .btn.small { padding: 5px 10px; font-size: 12px; margin-top: 8px; }
 
+.controls.save-controls {
+  margin-top: 8px;
+  align-items: center;
+}
+
+.save-status {
+  font-size: 12px;
+  color: #7a7568;
+}
+.save-status.error { color: var(--warn); font-weight: 600; }
+
 .legend {
   margin-top: 14px;
   font-size: 12px;

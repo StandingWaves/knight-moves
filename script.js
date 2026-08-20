@@ -182,6 +182,7 @@ function render() {
   renderControls();
   renderBanner();
   renderNextMoves();
+  saveNow();
 }
 
 function renderBoard() {
@@ -414,6 +415,8 @@ function clearTowers() {
 }
 
 function newGame() {
+  if (gameInProgress() &&
+      !confirm("Start a new game? This clears the current one, including its saved copy.")) return;
   phase = "play";
   towers = {};
   towerCellSet = new Set();
@@ -474,15 +477,259 @@ function renderNextMoves() {
 }
 
 // ------------------------------------------------------------
+// Saving & restoring
+//
+// The whole game -- towers, the knight's path, score and the
+// undo history -- is written to localStorage after every
+// change and read back when the page opens, so the
+// tab can be closed mid-puzzle. "Save to File"/"Load from File"
+// write the same snapshot as a .json file: handy for keeping a
+// game next to the puzzle or moving it to another browser, and
+// the fallback for browsers that refuse localStorage on
+// file:// pages.
+//
+// "Possible Scores Ahead" is not saved: it is pure arithmetic on
+// the score and move number, so renderNextMoves() rebuilds it
+// from the restored game.
+// ------------------------------------------------------------
+
+const SAVE_KEY = "knight-moves-save-v1";
+const BROKEN_KEY = SAVE_KEY + "-unreadable";
+const SAVE_VERSION = 1;
+
+function setStatus(text, isError) {
+  const el = document.getElementById("saveStatus");
+  el.textContent = text;
+  el.classList.toggle("error", !!isError);
+}
+
+function formatWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function gameInProgress() {
+  return moveNum > 1 || Object.keys(towers).length > 0;
+}
+
+// --- snapshot -------------------------------------------------
+
+function serializeState() {
+  return {
+    app: "knight-and-towers",
+    version: SAVE_VERSION,
+    savedAt: new Date().toISOString(),
+    placingTowers,
+    towers: { ...towers },
+    currentPos: { ...currentPos },
+    moveNum,
+    score: score.toString(),
+    visited: [...visited.entries()],
+    history: history.map(h => ({
+      from: { ...h.from },
+      to: { ...h.to },
+      prevScore: h.prevScore.toString(),
+      prevMoveNum: h.prevMoveNum,
+    })),
+  };
+}
+
+// --- reading a snapshot back ----------------------------------
+// Scores are BigInt, so they travel as decimal strings. Every
+// field is validated into a local first: a truncated or
+// hand-edited file throws before the live game is touched.
+
+function asArray(v, label) {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new Error(label + " should be a list");
+  return v;
+}
+
+function parseCount(v, label, min) {
+  if (!Number.isInteger(v) || v < min) throw new Error("bad " + label + ": " + v);
+  return v;
+}
+
+function parseScore(v, label) {
+  const s = String(v);
+  if (!/^\d+$/.test(s)) throw new Error("bad " + label + ": " + v);
+  return s;
+}
+
+function parsePos(p) {
+  const r = p && p.r;
+  const c = p && p.c;
+  if (!Number.isInteger(r) || !Number.isInteger(c) || !inBounds(r, c)) {
+    throw new Error("square (" + r + ", " + c + ") is not on the board");
+  }
+  return { r, c };
+}
+
+function parseCellKey(k) {
+  const m = /^(\d+),(\d+)$/.exec(String(k));
+  if (!m) throw new Error('bad square "' + k + '"');
+  return parsePos({ r: Number(m[1]), c: Number(m[2]) });
+}
+
+// Swaps the saved game in. Does not render -- callers do that,
+// so a failed load leaves the screen exactly as it was.
+function applyState(data) {
+  if (!data || typeof data !== "object" || data.version === undefined) {
+    throw new Error("this is not a Knight & Towers save");
+  }
+  if (data.version !== SAVE_VERSION) {
+    throw new Error("save format v" + data.version + " is not supported here");
+  }
+
+  const nextTowers = {};
+  Object.entries(data.towers || {}).forEach(([id, k]) => {
+    const regionId = Number(id);
+    if (!REGION_IDS.includes(regionId)) throw new Error("unknown region " + id);
+    const { r, c } = parseCellKey(k);
+    if (regionAt(r, c) !== regionId) {
+      throw new Error("region " + regionId + "'s tower is not inside that region");
+    }
+    nextTowers[regionId] = key(r, c);
+  });
+
+  const nextVisited = new Map();
+  asArray(data.visited, "visited squares").forEach(entry => {
+    const [k, info] = asArray(entry, "visited square");
+    const { r, c } = parseCellKey(k);
+    nextVisited.set(key(r, c), {
+      move: parseCount(info && info.move, "move number", 0),
+      score: parseScore(info && info.score, "score"),
+    });
+  });
+
+  const nextHistory = asArray(data.history, "move history").map(h => ({
+    from: parsePos(h && h.from),
+    to: parsePos(h && h.to),
+    prevScore: BigInt(parseScore(h && h.prevScore, "score")),
+    prevMoveNum: parseCount(h && h.prevMoveNum, "move number", 1),
+  }));
+
+  const nextPos = parsePos(data.currentPos);
+  const nextMoveNum = parseCount(data.moveNum, "move number", 1);
+  const nextScore = BigInt(parseScore(data.score, "score"));
+
+  // Everything parsed -- safe to hand the game over.
+  towers = nextTowers;
+  visited = nextVisited;
+  history = nextHistory;
+  currentPos = nextPos;
+  moveNum = nextMoveNum;
+  score = nextScore;
+  placingTowers = !!data.placingTowers;
+  phase = "play";
+  rebuildTowerSet();
+  recomputeVisitedTowerCount();
+}
+
+// --- localStorage ---------------------------------------------
+
+function storageGet(k) {
+  try {
+    return localStorage.getItem(k);
+  } catch (err) {
+    return null;
+  }
+}
+
+function storageSet(k, text) {
+  try {
+    localStorage.setItem(k, text);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function saveNow() {
+  if (storageSet(SAVE_KEY, JSON.stringify(serializeState()))) {
+    setStatus("Saved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  } else {
+    setStatus("Autosave is unavailable in this browser \u2014 use Save to File.", true);
+  }
+}
+
+function restoreSavedGame() {
+  const text = storageGet(SAVE_KEY);
+  if (!text) return { status: "none" };
+  try {
+    const data = JSON.parse(text);
+    applyState(data);
+    return { status: "restored", savedAt: data.savedAt };
+  } catch (err) {
+    // Keep the unreadable copy around instead of overwriting it.
+    console.warn("Knight & Towers: could not restore saved game \u2014", err);
+    storageSet(BROKEN_KEY, text);
+    return { status: "unreadable" };
+  }
+}
+
+// --- file save / load -----------------------------------------
+
+function saveToFile() {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const name = "knight-towers-" + stamp + "-move-" + (moveNum - 1) + ".json";
+  const blob = new Blob([JSON.stringify(serializeState(), null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus("Downloaded " + name + ".");
+}
+
+function loadFromFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      applyState(JSON.parse(reader.result));
+      render();
+      setStatus("Loaded " + file.name + ".");
+    } catch (err) {
+      setStatus("Could not load " + file.name + ": " + err.message, true);
+    }
+  };
+  reader.onerror = () => setStatus("Could not read " + file.name + ".", true);
+  reader.readAsText(file);
+}
+
+// ------------------------------------------------------------
 // Wire up
 // ------------------------------------------------------------
+
+const fileInput = document.getElementById("fileInput");
 
 document.getElementById("modeBtn").addEventListener("click", toggleMode);
 document.getElementById("undoBtn").addEventListener("click", undoMove);
 document.getElementById("resetTowersBtn").addEventListener("click", clearTowers);
 document.getElementById("resetAllBtn").addEventListener("click", newGame);
+document.getElementById("saveFileBtn").addEventListener("click", saveToFile);
+document.getElementById("loadFileBtn").addEventListener("click", () => {
+  if (gameInProgress() &&
+      !confirm("Load a saved game? It replaces the one on screen.")) return;
+  fileInput.value = ""; // so re-picking the same file still fires change
+  fileInput.click();
+});
+fileInput.addEventListener("change", () => loadFromFile(fileInput.files[0]));
 
 buildBoard();
-initScoreTable();
 visited.set(key(START.r, START.c), { move: 0, score: "0" });
+
+const restored = restoreSavedGame();
 render();
+
+if (restored.status === "restored") {
+  const when = formatWhen(restored.savedAt);
+  setStatus("Picked up where you left off" + (when ? " \u2014 saved " + when : "") + ".");
+} else if (restored.status === "unreadable") {
+  setStatus("A saved game was found but could not be read \u2014 it has been set aside.", true);
+}
