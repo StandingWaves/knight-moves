@@ -714,12 +714,22 @@ document.getElementById("resetTowersBtn").addEventListener("click", clearTowers)
 document.getElementById("resetAllBtn").addEventListener("click", newGame);
 document.getElementById("saveFileBtn").addEventListener("click", saveToFile);
 document.getElementById("loadFileBtn").addEventListener("click", () => {
-  if (gameInProgress() &&
-      !confirm("Load a saved game? It replaces the one on screen.")) return;
+  // Open the picker straight off the user's click. A confirm() here
+  // would spend the user activation that browsers require before a
+  // file dialog may open, and the picker would silently never appear.
   fileInput.value = ""; // so re-picking the same file still fires change
   fileInput.click();
 });
-fileInput.addEventListener("change", () => loadFromFile(fileInput.files[0]));
+
+// Confirming once a file is chosen needs no user activation, and the
+// question can name the file.
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (gameInProgress() &&
+      !confirm("Load " + file.name + "? It replaces the game on screen.")) return;
+  loadFromFile(file);
+});
 
 buildBoard();
 visited.set(key(START.r, START.c), { move: 0, score: "0" });
