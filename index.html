@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knight &amp; Towers</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <h1>Knight &amp; Towers</h1>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">Move</span>
+        <span class="stat-value" id="moveVal">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Score</span>
+        <span class="stat-value" id="scoreVal">0</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <div class="board-column">
+      <div class="phase-banner" id="phaseBanner"></div>
+      <div class="board" id="board"></div>
+
+      <div class="controls">
+        <button id="modeBtn" class="btn primary">Switch to: Move Knight</button>
+        <button id="undoBtn" class="btn">Undo Move</button>
+        <button id="resetTowersBtn" class="btn">Clear Unvisited Towers</button>
+        <button id="resetAllBtn" class="btn danger">New Game</button>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="swatch tower-swatch"></span> Tower (not yet visited)</div>
+        <div class="legend-item"><span class="swatch knight-swatch">&#9822;</span> Knight's current square</div>
+        <div class="legend-item"><span class="swatch valid-swatch"></span> Valid destination</div>
+      </div>
+    </div>
+
+    <aside class="side-column">
+
+      <div class="panel" id="regionPanel">
+        <h2>Regions</h2>
+        <p class="hint" id="setupHint">Towers and knight moves can be placed/made in any order &mdash; use the button above to switch modes. In tower mode: click a square to place that region's tower; click a placed tower again to remove it, or click another square in the same region to move it (only while that tower is still unvisited).</p>
+        <table class="region-table" id="regionTable">
+          <thead>
+            <tr><th>Region</th><th>Clue #</th><th>Tower at</th></tr>
+          </thead>
+          <tbody id="regionTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="panel next-moves-panel">
+        <h2>Possible Scores Ahead</h2>
+        <p class="hint">What the score could become over the next few moves, following the add/multiply/divide rules — not accounting for which squares are actually reachable or where towers are placed.</p>
+        <div class="next-moves-grid">
+          <div class="nm-col">
+            <div class="nm-head" id="nmHead1"></div>
+            <ul class="nm-list" id="nmList1"></ul>
+          </div>
+          <div class="nm-col">
+            <div class="nm-head" id="nmHead2"></div>
+            <ul class="nm-list" id="nmList2"></ul>
+          </div>
+          <div class="nm-col">
+            <div class="nm-head" id="nmHead3"></div>
+            <ul class="nm-list" id="nmList3"></ul>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
